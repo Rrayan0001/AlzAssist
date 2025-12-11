@@ -16,6 +16,7 @@ import CaretakerDashboard from '@/pages/Caretaker/Dashboard';
 import PatientDetail from '@/pages/Caretaker/PatientDetail';
 import AlertsPage from '@/pages/Caretaker/Alerts';
 import LocationsPage from '@/pages/Caretaker/Locations';
+import Profile from '@/pages/Profile';
 
 const ProtectedRoute = ({ children, allowedRole }: { children: React.ReactNode, allowedRole?: 'PATIENT' | 'CARETAKER' }) => {
   const { isAuthenticated, user } = useAuthStore();
@@ -60,6 +61,12 @@ function App() {
               <Route path="alerts" element={<AlertsPage />} />
               <Route path="locations" element={<LocationsPage />} />
             </Routes>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <Profile />
           </ProtectedRoute>
         } />
 

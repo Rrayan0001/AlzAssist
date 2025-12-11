@@ -42,31 +42,11 @@ const PatientDashboard = () => {
                     <DashboardOption title="Daily Tasks" icon={CheckSquare} to="/patient/tasks" color="border-t-sky-400" />
                     <DashboardOption title="Emergency" icon={Phone} to="/patient/emergency" color="border-t-rose-400" />
 
+
                     <DashboardOption title="Photo Gallery" icon={ImageIcon} to="/patient/gallery" color="border-t-pink-400" />
                     <DashboardOption title="Memory Games" icon={Gamepad2} to="/patient/games" color="border-t-purple-400" />
                     <DashboardOption title="My Location" icon={MapPin} to="/patient/location" color="border-t-indigo-400" />
                     <DashboardOption title="Requests" icon={UserPlus} to="/patient/requests" color="border-t-teal-400" />
-                </div>
-
-                {/* Quick Reminder Section */}
-                <div className="mt-12">
-                    <Card className="bg-muted/50 border-primary/20">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-2xl font-bold text-primary">
-                                <CheckSquare className="w-8 h-8" />
-                                Up Next
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between p-4 bg-card rounded-lg shadow-sm">
-                                <div>
-                                    <p className="text-lg font-semibold text-foreground">Take Vitamin C</p>
-                                    <p className="text-muted-foreground">10:00 AM • After Breakfast</p>
-                                </div>
-                                <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">Mark Done</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
                 </div>
             </main>
         </div>
@@ -74,3 +54,4 @@ const PatientDashboard = () => {
 };
 
 export default PatientDashboard;
+

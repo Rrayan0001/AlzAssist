@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Send, Smile, Meh, Frown, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/store/useAuthStore';
+import { api } from '@/lib/api';
 
 type Mood = 'Happy' | 'Neutral' | 'Sad';
 
@@ -31,45 +32,53 @@ const Journal = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Load entries from localStorage
+    // Load entries from backend
     useEffect(() => {
-        setIsLoading(true);
-        const stored = localStorage.getItem(`journal-entries-${user?.id}`);
-        if (stored) {
-            setEntries(JSON.parse(stored));
-        }
-        setIsLoading(false);
+        const loadEntries = async () => {
+            if (!user?.id) return;
+            setIsLoading(true);
+            try {
+                const result = await api.get(`/api/patient/journals/${user.id}`);
+                if (result.success && Array.isArray(result.data)) {
+                    setEntries(result.data);
+                }
+            } catch (error) {
+                console.error('Failed to load journals:', error);
+            }
+            setIsLoading(false);
+        };
+        loadEntries();
     }, [user]);
 
-    // Save to localStorage whenever entries change
-    useEffect(() => {
-        if (user && entries.length > 0) {
-            localStorage.setItem(`journal-entries-${user.id}`, JSON.stringify(entries));
-        }
-    }, [entries, user]);
-
-    const handleSave = () => {
-        if (!newEntry.trim()) return;
+    const handleSave = async () => {
+        if (!newEntry.trim() || !user?.id) return;
         setIsSaving(true);
 
-        const newEntryData: Entry = {
-            id: Date.now().toString(),
-            created_at: new Date().toISOString(),
-            content: newEntry,
-            mood: selectedMood
-        };
+        try {
+            const result = await api.post('/api/patient/journals', {
+                userId: user.id,
+                content: newEntry,
+                mood: selectedMood
+            });
 
-        setEntries([newEntryData, ...entries]);
+            if (result.success && result.data) {
+                setEntries([result.data, ...entries]);
+            }
+        } catch (error) {
+            console.error('Failed to save journal:', error);
+        }
+
         setNewEntry('');
         setSelectedMood('Neutral');
         setIsSaving(false);
     };
 
-    const handleDelete = (id: string) => {
-        const updated = entries.filter(e => e.id !== id);
-        setEntries(updated);
-        if (updated.length === 0) {
-            localStorage.removeItem(`journal-entries-${user?.id}`);
+    const handleDelete = async (id: string) => {
+        try {
+            await api.delete(`/api/patient/journals/${id}`);
+            setEntries(entries.filter(e => e.id !== id));
+        } catch (error) {
+            console.error('Failed to delete journal:', error);
         }
     };
 
@@ -141,7 +150,7 @@ const Journal = () => {
                 ) : (
                     <div className="space-y-4">
                         {entries.map((entry) => {
-                            const config = moodConfig[entry.mood];
+                            const config = moodConfig[entry.mood] || moodConfig.Neutral;
                             const Icon = config.icon;
                             return (
                                 <Card key={entry.id}>

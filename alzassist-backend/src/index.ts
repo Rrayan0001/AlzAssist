@@ -15,6 +15,8 @@ import taskRoutes from './routes/task.routes';
 import galleryRoutes from './routes/gallery.routes';
 import locationRoutes from './routes/location.routes';
 import alertRoutes from './routes/alert.routes';
+import patientLinkRoutes from './routes/patientLink.routes';
+import patientDataRoutes from './routes/patientData.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +40,8 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/gallery', galleryRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/patient-links', patientLinkRoutes);
+app.use('/api/patient', patientDataRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -21,16 +21,15 @@ const Navbar = () => {
                 <div className="flex items-center gap-4">
                     {user ? (
                         <>
-                            <div className="flex items-center gap-2">
-                                <Avatar>
-                                    <AvatarImage src="https://github.com/shadcn.png" />
-                                    <AvatarFallback>{user.name?.charAt(0)}</AvatarFallback>
+                            <Link to="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                                <Avatar className="bg-primary/10">
+                                    <AvatarFallback className="text-primary font-bold">{user.name?.charAt(0).toUpperCase()}</AvatarFallback>
                                 </Avatar>
                                 <div className="hidden md:block">
                                     <p className="text-sm font-medium">{user.name}</p>
                                     <p className="text-xs text-muted-foreground capitalize">{user.role?.toLowerCase()}</p>
                                 </div>
-                            </div>
+                            </Link>
                             <Button variant="outline" onClick={handleLogout} className="cursor-pointer">
                                 Logout
                             </Button>

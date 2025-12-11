@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/shared/Navbar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, MapPin, Navigation, AlertCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useAuthStore } from '@/store/useAuthStore';
+import { api } from '@/lib/api';
 
 import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -30,12 +32,34 @@ const MapRecenter = ({ position }: { position: [number, number] }) => {
 };
 
 const LocationPage = () => {
+    const { user } = useAuthStore();
     const [position, setPosition] = useState<[number, number] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
-    const requestLocation = () => {
+    // Send location to backend
+    const syncLocationToBackend = useCallback(async (lat: number, lng: number) => {
+        if (!user?.id) return;
+
+        setSyncStatus('syncing');
+        try {
+            await api.post('/api/patient/location', {
+                userId: user.id,
+                lat,
+                lng,
+                status: 'Safe',
+                battery: 100 // Could get real battery if available
+            });
+            setSyncStatus('synced');
+        } catch (err) {
+            console.error('Failed to sync location:', err);
+            setSyncStatus('error');
+        }
+    }, [user]);
+
+    const requestLocation = useCallback(() => {
         setLoading(true);
         setError(null);
 
@@ -50,6 +74,8 @@ const LocationPage = () => {
                 setPosition([pos.coords.latitude, pos.coords.longitude]);
                 setLastUpdated(new Date());
                 setLoading(false);
+                // Sync to backend
+                syncLocationToBackend(pos.coords.latitude, pos.coords.longitude);
             },
             (err) => {
                 setError(`Unable to get location: ${err.message}`);
@@ -61,14 +87,14 @@ const LocationPage = () => {
                 maximumAge: 0
             }
         );
-    };
+    }, [syncLocationToBackend]);
 
     useEffect(() => {
         requestLocation();
         // Update location every 30 seconds
         const interval = setInterval(requestLocation, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [requestLocation]);
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
@@ -78,62 +104,32 @@ const LocationPage = () => {
                     <ArrowLeft className="mr-2" /> Back to Dashboard
                 </Link>
 
-                <h1 className="text-3xl font-bold text-foreground mb-6">My Location</h1>
-
-                {error && (
-                    <Card className="mb-4 border-destructive bg-destructive/10">
-                        <CardContent className="p-4 flex items-center gap-3">
-                            <AlertCircle className="text-destructive w-6 h-6" />
-                            <div>
-                                <p className="font-medium text-destructive">{error}</p>
-                                <Button variant="outline" size="sm" className="mt-2" onClick={requestLocation}>
-                                    Try Again
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                <Card className="flex-1 shadow-lg border-2 border-primary/20 overflow-hidden min-h-[500px]">
-                    <CardContent className="p-0 h-full relative">
-                        {loading && !position ? (
-                            <div className="h-full min-h-[500px] flex items-center justify-center bg-muted">
-                                <div className="text-center">
-                                    <Navigation className="w-12 h-12 text-primary animate-pulse mx-auto mb-4" />
-                                    <p className="text-lg text-muted-foreground">Getting your location...</p>
+                <Card className="mb-4">
+                    <CardContent className="py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <MapPin className="w-6 h-6 text-primary" />
+                                <div>
+                                    <h1 className="text-xl font-bold">My Location</h1>
+                                    <p className="text-sm text-muted-foreground">
+                                        Your location is being shared with your caretaker
+                                    </p>
                                 </div>
                             </div>
-                        ) : position ? (
-                            <MapContainer center={position} zoom={15} scrollWheelZoom={true} className="h-full w-full min-h-[500px]">
-                                <TileLayer
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                />
-                                <Marker position={position}>
-                                    <Popup>
-                                        <strong>You are here!</strong><br />
-                                        Lat: {position[0].toFixed(6)}<br />
-                                        Lng: {position[1].toFixed(6)}
-                                    </Popup>
-                                </Marker>
-                                <MapRecenter position={position} />
-                            </MapContainer>
-                        ) : null}
-
-                        <div className="absolute bottom-4 left-4 right-4 bg-card/95 backdrop-blur p-4 rounded-lg shadow-lg z-[1000]">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <MapPin className="text-primary w-6 h-6" />
-                                    <div>
-                                        <p className="font-bold text-foreground">Location Sharing is <span className="text-green-600">ON</span></p>
-                                        {lastUpdated && (
-                                            <p className="text-sm text-muted-foreground">
-                                                Last updated: {lastUpdated.toLocaleTimeString()}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                                <Button onClick={requestLocation} variant="outline" size="sm" disabled={loading}>
+                            <div className="flex items-center gap-2">
+                                {syncStatus === 'syncing' && (
+                                    <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Syncing...
+                                    </span>
+                                )}
+                                {syncStatus === 'synced' && (
+                                    <span className="flex items-center gap-1 text-sm text-green-600">
+                                        <CheckCircle2 className="w-4 h-4" />
+                                        Shared
+                                    </span>
+                                )}
+                                <Button onClick={requestLocation} variant="outline" size="sm">
                                     <Navigation className="w-4 h-4 mr-2" />
                                     Refresh
                                 </Button>
@@ -141,6 +137,59 @@ const LocationPage = () => {
                         </div>
                     </CardContent>
                 </Card>
+
+                {error && (
+                    <Card className="mb-4 border-destructive">
+                        <CardContent className="py-4 flex items-center gap-3 text-destructive">
+                            <AlertCircle className="w-5 h-5" />
+                            <span>{error}</span>
+                        </CardContent>
+                    </Card>
+                )}
+
+                <Card className="flex-1">
+                    <CardContent className="p-0 h-[500px]">
+                        {loading && !position ? (
+                            <div className="h-full flex items-center justify-center">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                <span className="ml-2">Getting your location...</span>
+                            </div>
+                        ) : position ? (
+                            <MapContainer
+                                center={position}
+                                zoom={15}
+                                className="h-full w-full rounded-lg"
+                            >
+                                <TileLayer
+                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                />
+                                <Marker position={position}>
+                                    <Popup>
+                                        <strong>You are here</strong>
+                                        <br />
+                                        {lastUpdated && (
+                                            <span className="text-xs text-muted-foreground">
+                                                Updated: {lastUpdated.toLocaleTimeString()}
+                                            </span>
+                                        )}
+                                    </Popup>
+                                </Marker>
+                                <MapRecenter position={position} />
+                            </MapContainer>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-muted-foreground">
+                                Unable to load map
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {lastUpdated && (
+                    <p className="text-center text-sm text-muted-foreground mt-4">
+                        Location updates every 30 seconds • Last update: {lastUpdated.toLocaleTimeString()}
+                    </p>
+                )}
             </main>
         </div>
     );

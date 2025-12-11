@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Check, ArrowLeft, Clock, Info, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
+import { api } from '@/lib/api';
 
 interface Medicine {
     id: string;
@@ -15,10 +16,8 @@ interface Medicine {
     dosage: string;
     time: string;
     taken: boolean;
-    instructions: string;
+    instructions?: string;
 }
-
-// No demo data - start empty
 
 const Medications = () => {
     const { user } = useAuthStore();
@@ -28,56 +27,70 @@ const Medications = () => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [newMed, setNewMed] = useState({ name: '', dosage: '', time: '', instructions: '' });
 
-    // Load medications
+    // Load medications from backend
     useEffect(() => {
-        const loadMeds = () => {
+        const loadMeds = async () => {
+            if (!user?.id) return;
             setIsLoading(true);
-            const stored = localStorage.getItem(`medications-${user?.id}`);
-            if (stored) {
-                setMeds(JSON.parse(stored));
-            } else {
-                setMeds([]);
+            try {
+                const result = await api.get(`/api/patient/medications/${user.id}`);
+                if (result.success && Array.isArray(result.data)) {
+                    setMeds(result.data);
+                }
+            } catch (error) {
+                console.error('Failed to load medications:', error);
             }
             setIsLoading(false);
         };
-
-        if (user) {
-            loadMeds();
-        }
+        loadMeds();
     }, [user]);
 
-    // Save whenever meds change
-    useEffect(() => {
-        if (user && meds.length > 0) {
-            localStorage.setItem(`medications-${user.id}`, JSON.stringify(meds));
-        }
-    }, [meds, user]);
+    const toggleTaken = async (id: string) => {
+        const med = meds.find(m => m.id === id);
+        if (!med) return;
 
-    const toggleTaken = (id: string) => {
-        setMeds(meds.map(m => m.id === id ? { ...m, taken: !m.taken } : m));
+        try {
+            await api.put(`/api/patient/medications/${id}`, { taken: !med.taken });
+            setMeds(meds.map(m => m.id === id ? { ...m, taken: !m.taken } : m));
+        } catch (error) {
+            console.error('Failed to update medication:', error);
+        }
     };
 
-    const handleAddMed = () => {
-        if (!newMed.name || !newMed.dosage || !newMed.time) return;
-        const med: Medicine = {
-            id: Date.now().toString(),
-            ...newMed,
-            taken: false
-        };
-        setMeds([...meds, med]);
+    const handleAddMed = async () => {
+        if (!newMed.name || !newMed.dosage || !newMed.time || !user?.id) return;
+
+        try {
+            const result = await api.post('/api/patient/medications', {
+                userId: user.id,
+                name: newMed.name,
+                dosage: newMed.dosage,
+                time: newMed.time,
+                instructions: newMed.instructions
+            });
+
+            if (result.success && result.data) {
+                setMeds([...meds, result.data]);
+            }
+        } catch (error) {
+            console.error('Failed to add medication:', error);
+        }
+
         setNewMed({ name: '', dosage: '', time: '', instructions: '' });
         setDialogOpen(false);
     };
 
-    const handleDeleteMed = (id: string) => {
-        const updated = meds.filter(m => m.id !== id);
-        setMeds(updated);
-        if (updated.length === 0) {
-            localStorage.removeItem(`medications-${user?.id}`);
+    const handleDeleteMed = async (id: string) => {
+        try {
+            await api.delete(`/api/patient/medications/${id}`);
+            setMeds(meds.filter(m => m.id !== id));
+        } catch (error) {
+            console.error('Failed to delete medication:', error);
         }
     };
 
     const formatTime = (time: string) => {
+        if (!time.includes(':')) return time;
         const [hours, minutes] = time.split(':');
         const h = parseInt(hours);
         const ampm = h >= 12 ? 'PM' : 'AM';
@@ -98,7 +111,7 @@ const Medications = () => {
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                         <DialogTrigger asChild>
                             <Button className="bg-emerald-500 hover:bg-emerald-600">
-                                <Plus className="w-4 h-4 mr-2" /> Add Medication
+                                <Plus className="mr-2 h-4 w-4" /> Add Medication
                             </Button>
                         </DialogTrigger>
                         <DialogContent>
@@ -106,42 +119,40 @@ const Medications = () => {
                                 <DialogTitle>Add New Medication</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="med-name">Medication Name</Label>
+                                <div>
+                                    <Label htmlFor="name">Medication Name</Label>
                                     <Input
-                                        id="med-name"
-                                        placeholder="e.g. Aspirin"
+                                        id="name"
                                         value={newMed.name}
-                                        onChange={(e) => setNewMed({ ...newMed, name: e.target.value })}
+                                        onChange={e => setNewMed({ ...newMed, name: e.target.value })}
+                                        placeholder="e.g., Donepezil"
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="med-dosage">Dosage</Label>
-                                        <Input
-                                            id="med-dosage"
-                                            placeholder="e.g. 100mg"
-                                            value={newMed.dosage}
-                                            onChange={(e) => setNewMed({ ...newMed, dosage: e.target.value })}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="med-time">Time</Label>
-                                        <Input
-                                            id="med-time"
-                                            type="time"
-                                            value={newMed.time}
-                                            onChange={(e) => setNewMed({ ...newMed, time: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="med-instructions">Instructions (Optional)</Label>
+                                <div>
+                                    <Label htmlFor="dosage">Dosage</Label>
                                     <Input
-                                        id="med-instructions"
-                                        placeholder="e.g. Take with food"
+                                        id="dosage"
+                                        value={newMed.dosage}
+                                        onChange={e => setNewMed({ ...newMed, dosage: e.target.value })}
+                                        placeholder="e.g., 10mg"
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor="time">Time</Label>
+                                    <Input
+                                        id="time"
+                                        type="time"
+                                        value={newMed.time}
+                                        onChange={e => setNewMed({ ...newMed, time: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor="instructions">Instructions (optional)</Label>
+                                    <Input
+                                        id="instructions"
                                         value={newMed.instructions}
-                                        onChange={(e) => setNewMed({ ...newMed, instructions: e.target.value })}
+                                        onChange={e => setNewMed({ ...newMed, instructions: e.target.value })}
+                                        placeholder="e.g., Take with food"
                                     />
                                 </div>
                             </div>
@@ -149,7 +160,7 @@ const Medications = () => {
                                 <DialogClose asChild>
                                     <Button variant="outline">Cancel</Button>
                                 </DialogClose>
-                                <Button onClick={handleAddMed} disabled={!newMed.name || !newMed.dosage || !newMed.time}>
+                                <Button onClick={handleAddMed} className="bg-emerald-500 hover:bg-emerald-600">
                                     Add Medication
                                 </Button>
                             </DialogFooter>
@@ -158,57 +169,61 @@ const Medications = () => {
                 </div>
 
                 {isLoading ? (
-                    <div className="text-center py-8">
-                        <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-                        <p className="text-muted-foreground mt-2">Loading medications...</p>
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     </div>
+                ) : meds.length === 0 ? (
+                    <Card>
+                        <CardContent className="py-8 text-center text-muted-foreground">
+                            No medications added yet. Click "Add Medication" to get started.
+                        </CardContent>
+                    </Card>
                 ) : (
-                    <div className="grid gap-4">
-                        {meds.length === 0 ? (
-                            <p className="text-muted-foreground text-center py-8">No medications added. Click "Add Medication" to get started.</p>
-                        ) : (
-                            meds.map((med) => (
-                                <Card key={med.id} className={`border-l-8 group relative ${med.taken ? 'border-l-emerald-500 bg-emerald-50' : 'border-l-muted bg-card'}`}>
-                                    <CardContent className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-1">
-                                                <h3 className="text-2xl font-bold text-foreground">{med.name}</h3>
-                                                <span className="text-lg font-medium text-muted-foreground">({med.dosage})</span>
-                                            </div>
-                                            <div className="flex items-center gap-4 text-muted-foreground">
-                                                <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {formatTime(med.time)}</span>
-                                                {med.instructions && (
-                                                    <span className="flex items-center gap-1"><Info className="w-4 h-4" /> {med.instructions}</span>
-                                                )}
+                    <div className="space-y-4">
+                        {meds.map(med => (
+                            <Card key={med.id} className={`transition-all ${med.taken ? 'opacity-60' : ''}`}>
+                                <CardContent className="py-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <button
+                                                onClick={() => toggleTaken(med.id)}
+                                                className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all ${med.taken
+                                                        ? 'bg-emerald-500 border-emerald-500 text-white'
+                                                        : 'border-muted-foreground hover:border-emerald-500'
+                                                    }`}
+                                            >
+                                                {med.taken && <Check className="w-5 h-5" />}
+                                            </button>
+                                            <div>
+                                                <h3 className={`font-semibold text-lg ${med.taken ? 'line-through' : ''}`}>
+                                                    {med.name} ({med.dosage})
+                                                </h3>
+                                                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                                                    <Clock className="w-4 h-4" />
+                                                    {formatTime(med.time)}
+                                                </div>
                                             </div>
                                         </div>
-
                                         <div className="flex items-center gap-2">
-                                            <Button
-                                                size="lg"
-                                                className={`min-w-[140px] text-lg h-14 ${med.taken ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-card text-foreground border-2 border-muted hover:bg-muted'}`}
-                                                variant={med.taken ? 'default' : 'outline'}
-                                                onClick={() => toggleTaken(med.id)}
-                                            >
-                                                {med.taken ? (
-                                                    <><Check className="mr-2 h-6 w-6" /> Taken</>
-                                                ) : (
-                                                    'Mark Taken'
-                                                )}
-                                            </Button>
+                                            {med.instructions && (
+                                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                    <Info className="w-3 h-3" />
+                                                    {med.instructions}
+                                                </span>
+                                            )}
                                             <Button
                                                 variant="ghost"
-                                                size="icon"
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                                                size="sm"
                                                 onClick={() => handleDeleteMed(med.id)}
+                                                className="text-destructive hover:text-destructive"
                                             >
-                                                <Trash2 className="w-5 h-5" />
+                                                <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            ))
-                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))}
                     </div>
                 )}
             </main>

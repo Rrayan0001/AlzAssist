@@ -9,6 +9,9 @@ interface User {
     email: string;
     name: string;
     role: Role;
+    phone?: string;
+    age?: number;
+    address?: string;
 }
 
 interface AuthState {
@@ -18,6 +21,7 @@ interface AuthState {
     error: string | null;
     login: (email: string, password: string, role: Role) => Promise<boolean>;
     signup: (email: string, password: string, name: string, role: Role) => Promise<boolean>;
+    updateUser: (user: User) => void;
     logout: () => void;
     clearError: () => void;
 }
@@ -96,6 +100,10 @@ export const useAuthStore = create<AuthState>()(
                     });
                     return false;
                 }
+            },
+
+            updateUser: (user) => {
+                set({ user });
             },
 
             logout: () => {

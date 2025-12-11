@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/shared/Navbar';
 import { Card } from '@/components/ui/card';
@@ -6,27 +6,52 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { ArrowLeft, User, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, User, Plus, Trash2, Upload, X, Loader2 } from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
+import { api } from '@/lib/api';
 
 interface Face {
     id: string;
     name: string;
     relation: string;
-    img: string;
+    image_url: string;
 }
 
-const initialFaces: Face[] = [
-    { id: '1', name: 'Martha', relation: 'Wife', img: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=400&fit=crop' },
-    { id: '2', name: 'David', relation: 'Son', img: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop' },
-];
-
 const Gallery = () => {
-    const [faces, setFaces] = useState<Face[]>(initialFaces);
+    const { user } = useAuthStore();
+    const [faces, setFaces] = useState<Face[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [newName, setNewName] = useState('');
     const [newRelation, setNewRelation] = useState('');
     const [newImage, setNewImage] = useState<string | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Load gallery from backend
+    useEffect(() => {
+        const loadGallery = async () => {
+            if (!user?.id) return;
+            setIsLoading(true);
+            try {
+                const result = await api.get(`/api/patient/gallery/${user.id}`);
+                if (result.success && Array.isArray(result.data)) {
+                    // Map backend data to Face interface
+                    const mappedFaces = result.data.map((item: { id: string; caption?: string; image_url: string }) => ({
+                        id: item.id,
+                        name: item.caption?.split(' - ')[0] || 'Unknown',
+                        relation: item.caption?.split(' - ')[1] || 'Person',
+                        image_url: item.image_url
+                    }));
+                    setFaces(mappedFaces);
+                }
+            } catch (error) {
+                console.error('Failed to load gallery:', error);
+            }
+            setIsLoading(false);
+        };
+        loadGallery();
+    }, [user]);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -39,25 +64,44 @@ const Gallery = () => {
         }
     };
 
-    const handleAddFace = () => {
-        if (!newName.trim() || !newRelation.trim() || !newImage) return;
+    const handleAddFace = async () => {
+        if (!newName.trim() || !newRelation.trim() || !newImage || !user?.id) return;
 
-        const newFace: Face = {
-            id: Date.now().toString(),
-            name: newName,
-            relation: newRelation,
-            img: newImage
-        };
+        setIsSaving(true);
+        try {
+            const result = await api.post('/api/patient/gallery', {
+                userId: user.id,
+                imageUrl: newImage, // Base64 image or URL
+                caption: `${newName} - ${newRelation}`
+            });
 
-        setFaces([...faces, newFace]);
+            if (result.success && result.data) {
+                const newFace: Face = {
+                    id: result.data.id,
+                    name: newName,
+                    relation: newRelation,
+                    image_url: result.data.image_url
+                };
+                setFaces([newFace, ...faces]);
+            }
+        } catch (error) {
+            console.error('Failed to add face:', error);
+        }
+
         setNewName('');
         setNewRelation('');
         setNewImage(null);
         setDialogOpen(false);
+        setIsSaving(false);
     };
 
-    const handleDeleteFace = (id: string) => {
-        setFaces(faces.filter(f => f.id !== id));
+    const handleDeleteFace = async (id: string) => {
+        try {
+            await api.delete(`/api/patient/gallery/${id}`);
+            setFaces(faces.filter(f => f.id !== id));
+        } catch (error) {
+            console.error('Failed to delete face:', error);
+        }
     };
 
     return (
@@ -110,27 +154,25 @@ const Gallery = () => {
                                         onChange={handleImageUpload}
                                         className="hidden"
                                     />
-                                    <Button variant="link" onClick={() => fileInputRef.current?.click()} className="mt-2">
-                                        {newImage ? 'Change Photo' : 'Upload Photo'}
-                                    </Button>
+                                    <p className="text-sm text-muted-foreground mt-2">Click to upload photo</p>
                                 </div>
 
-                                <div className="space-y-2">
+                                <div>
                                     <Label htmlFor="name">Name</Label>
                                     <Input
                                         id="name"
-                                        placeholder="e.g. Martha"
                                         value={newName}
                                         onChange={(e) => setNewName(e.target.value)}
+                                        placeholder="e.g., Martha"
                                     />
                                 </div>
-                                <div className="space-y-2">
+                                <div>
                                     <Label htmlFor="relation">Relationship</Label>
                                     <Input
                                         id="relation"
-                                        placeholder="e.g. Wife, Son, Nurse"
                                         value={newRelation}
                                         onChange={(e) => setNewRelation(e.target.value)}
+                                        placeholder="e.g., Wife, Son, Doctor"
                                     />
                                 </div>
                             </div>
@@ -138,7 +180,8 @@ const Gallery = () => {
                                 <DialogClose asChild>
                                     <Button variant="outline">Cancel</Button>
                                 </DialogClose>
-                                <Button onClick={handleAddFace} disabled={!newName || !newRelation || !newImage}>
+                                <Button onClick={handleAddFace} disabled={isSaving || !newName || !newRelation || !newImage}>
+                                    {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
                                     Add Person
                                 </Button>
                             </DialogFooter>
@@ -146,37 +189,41 @@ const Gallery = () => {
                     </Dialog>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                    {faces.map((person) => (
-                        <Card key={person.id} className="overflow-hidden border-2 border-primary/20 shadow-md transform hover:scale-105 transition-transform group relative">
-                            <div className="aspect-square bg-muted relative">
-                                <img src={person.img} alt={person.name} className="w-full h-full object-cover" />
-                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-                                    <p className="text-white font-bold text-xl">{person.name}</p>
-                                    <p className="text-primary-foreground/80 text-sm">{person.relation}</p>
-                                </div>
+                {isLoading ? (
+                    <div className="flex justify-center py-12">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                ) : faces.length === 0 ? (
+                    <Card className="p-12 text-center">
+                        <User className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                        <p className="text-muted-foreground mb-4">No faces added yet.</p>
+                        <p className="text-sm text-muted-foreground">Click the + button to add familiar faces that help with memory.</p>
+                    </Card>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        {faces.map(face => (
+                            <Card key={face.id} className="p-4 relative group">
                                 <Button
                                     variant="destructive"
                                     size="icon"
-                                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => handleDeleteFace(person.id)}
+                                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity w-8 h-8"
+                                    onClick={() => handleDeleteFace(face.id)}
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </Button>
-                            </div>
-                        </Card>
-                    ))}
-                    {/* Add New Placeholder */}
-                    <Card
-                        className="border-2 border-dashed border-primary/30 shadow-sm flex items-center justify-center bg-muted/50 cursor-pointer hover:bg-muted transition-colors h-full min-h-[300px]"
-                        onClick={() => setDialogOpen(true)}
-                    >
-                        <div className="text-center text-muted-foreground">
-                            <User className="w-16 h-16 mx-auto mb-2" />
-                            <p className="font-medium">Add New Photo</p>
-                        </div>
-                    </Card>
-                </div>
+                                <div className="flex flex-col items-center">
+                                    <img
+                                        src={face.image_url}
+                                        alt={face.name}
+                                        className="w-24 h-24 rounded-full object-cover border-4 border-primary/20 mb-3"
+                                    />
+                                    <h3 className="font-semibold text-lg text-foreground">{face.name}</h3>
+                                    <p className="text-sm text-muted-foreground">{face.relation}</p>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                )}
             </main>
         </div>
     );

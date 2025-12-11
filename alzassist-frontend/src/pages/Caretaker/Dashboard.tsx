@@ -9,19 +9,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Users, AlertTriangle, Map, Activity, Eye, MapPin, Bell, Check, Trash2, Link2, Mail, UserPlus, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
+import { api } from '@/lib/api';
 
 export interface Patient {
     id: string;
     name: string;
     email: string;
-    age: number;
+    age?: number;
     status: 'Safe' | 'Alert' | 'Offline';
-    lastLocation: string;
-    battery: number;
-    lat: number;
-    lng: number;
-    phone: string;
-    linkedAt: string;
+    lastLocation?: string;
+    battery?: number;
+    lat?: number;
+    lng?: number;
+    phone?: string;
+    linkedAt?: string;
+    location?: {
+        lat: number;
+        lng: number;
+        status: string;
+        battery: number;
+        updated_at: string;
+    } | null;
 }
 
 export interface Alert {
@@ -34,47 +42,48 @@ export interface Alert {
     resolved: boolean;
 }
 
-// No demo data - start empty
-const getInitialPatients = (): Patient[] => {
-    return [];
-};
-
-const initialAlerts: Alert[] = [];
-
-// Export for use in other pages
+// Export for use in other pages - now fetches from backend
 export const usePatientsStore = () => {
     const { user } = useAuthStore();
-    const storageKey = `caretaker-patients-${user?.id}`;
+    const [patients, setPatients] = useState<Patient[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const [patients, setPatients] = useState<Patient[]>(() => {
-        const stored = localStorage.getItem(storageKey);
-        if (stored) return JSON.parse(stored);
-        return getInitialPatients();
-    });
-
-    const savePatients = (newPatients: Patient[]) => {
-        localStorage.setItem(storageKey, JSON.stringify(newPatients));
-        setPatients(newPatients);
+    const fetchPatients = async () => {
+        if (!user?.id) return;
+        setIsLoading(true);
+        try {
+            const result = await api.get(`/api/patient-links/patients/${user.id}`);
+            if (result.success && result.data?.patients) {
+                // Transform backend data to Patient format
+                const transformedPatients: Patient[] = result.data.patients.map((p: { id: string; name: string; email: string; location?: { lat: number; lng: number; status: string; battery: number; updated_at: string } | null; linkedAt?: string }) => ({
+                    id: p.id,
+                    name: p.name,
+                    email: p.email,
+                    status: p.location ? 'Safe' : 'Offline',
+                    lat: p.location?.lat,
+                    lng: p.location?.lng,
+                    battery: 0,
+                    lastLocation: p.location ? `Last updated ${new Date(p.location.updated_at).toLocaleTimeString()}` : 'No location',
+                    linkedAt: p.linkedAt
+                }));
+                setPatients(transformedPatients);
+            }
+        } catch (error) {
+            console.error('Failed to fetch patients:', error);
+        }
+        setIsLoading(false);
     };
 
-    return { patients, setPatients: savePatients };
+    useEffect(() => {
+        fetchPatients();
+    }, [user]);
+
+    return { patients, setPatients, isLoading, refetch: fetchPatients };
 };
 
 export const useAlertsStore = () => {
-    const { user } = useAuthStore();
-    const storageKey = `caretaker-alerts-${user?.id}`;
-
-    const [alerts, setAlerts] = useState<Alert[]>(() => {
-        const stored = localStorage.getItem(storageKey);
-        return stored ? JSON.parse(stored) : initialAlerts;
-    });
-
-    const saveAlerts = (newAlerts: Alert[]) => {
-        localStorage.setItem(storageKey, JSON.stringify(newAlerts));
-        setAlerts(newAlerts);
-    };
-
-    return { alerts, setAlerts: saveAlerts };
+    const [alerts, setAlerts] = useState<Alert[]>([]);
+    return { alerts, setAlerts };
 };
 
 const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: string, icon: React.ElementType, color: string }) => (
@@ -92,14 +101,16 @@ const StatCard = ({ title, value, icon: Icon, color }: { title: string, value: s
 );
 
 const CaretakerDashboard = () => {
+    const { user } = useAuthStore();
     const navigate = useNavigate();
-    const { patients, setPatients } = usePatientsStore();
+    const { patients, setPatients, refetch } = usePatientsStore();
     const { alerts, setAlerts } = useAlertsStore();
 
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [linkEmail, setLinkEmail] = useState('');
     const [linkSuccess, setLinkSuccess] = useState(false);
     const [linkError, setLinkError] = useState('');
+    const [, setIsLinking] = useState(false);
 
     const activeAlerts = alerts.filter(a => !a.resolved);
     const safePatients = patients.filter(p => p.status === 'Safe').length;
@@ -115,47 +126,51 @@ const CaretakerDashboard = () => {
         }
     }, [linkDialogOpen]);
 
-    const handleLinkPatient = () => {
+    const handleLinkPatient = async () => {
         setLinkError('');
+        setIsLinking(true);
 
         // Validate email
         if (!linkEmail.trim() || !linkEmail.includes('@')) {
             setLinkError('Please enter a valid email address');
+            setIsLinking(false);
             return;
         }
 
-        // Check if already linked
-        if (patients.some(p => p.email.toLowerCase() === linkEmail.toLowerCase())) {
-            setLinkError('This patient is already linked to your account');
-            return;
+        try {
+            const result = await api.post('/api/patient-links/link', {
+                caretakerId: user?.id,
+                patientEmail: linkEmail
+            });
+
+            if (!result.success) {
+                setLinkError(result.error || 'Failed to link patient');
+                setIsLinking(false);
+                return;
+            }
+
+            // Refresh the patients list
+            await refetch();
+            setLinkSuccess(true);
+        } catch (error) {
+            console.error('Link patient error:', error);
+            setLinkError('Failed to connect. Please try again.');
         }
-
-        // Create new patient from email (in real app, this would be an API call)
-        const newPatient: Patient = {
-            id: 'linked-' + Date.now(),
-            name: linkEmail.split('@')[0].replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            email: linkEmail.toLowerCase(),
-            age: 0, // Will be updated when patient completes profile
-            status: 'Safe',
-            lastLocation: 'Pending...',
-            battery: 0,
-            lat: 40.7128 + (Math.random() - 0.5) * 0.1,
-            lng: -74.0060 + (Math.random() - 0.5) * 0.1,
-            phone: 'Pending...',
-            linkedAt: new Date().toISOString()
-        };
-
-        setPatients([...patients, newPatient]);
-        setLinkSuccess(true);
+        setIsLinking(false);
     };
 
     const handleResolveAlert = (alertId: string) => {
         setAlerts(alerts.map(a => a.id === alertId ? { ...a, resolved: true } : a));
     };
 
-    const handleDeletePatient = (patientId: string) => {
-        setPatients(patients.filter(p => p.id !== patientId));
-        setAlerts(alerts.filter(a => a.patientId !== patientId));
+    const handleDeletePatient = async (patientId: string) => {
+        try {
+            await api.delete(`/api/patient-links/unlink/${user?.id}/${patientId}`);
+            setPatients(patients.filter(p => p.id !== patientId));
+            setAlerts(alerts.filter(a => a.patientId !== patientId));
+        } catch (error) {
+            console.error('Failed to unlink patient:', error);
+        }
     };
 
     const formatTime = (date: Date) => {
@@ -305,7 +320,6 @@ const CaretakerDashboard = () => {
                                             <TableHead>Name</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Location</TableHead>
-                                            <TableHead>Battery</TableHead>
                                             <TableHead className="text-right">Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -327,11 +341,6 @@ const CaretakerDashboard = () => {
                                                     </span>
                                                 </TableCell>
                                                 <TableCell>{p.lastLocation}</TableCell>
-                                                <TableCell>
-                                                    <span className={p.battery < 20 ? 'text-red-600 font-bold' : ''}>
-                                                        {p.battery > 0 ? `${p.battery}%` : '--'}
-                                                    </span>
-                                                </TableCell>
                                                 <TableCell className="text-right space-x-2">
                                                     <Button variant="outline" size="sm" onClick={() => navigate(`/caretaker/patient/${p.id}`)}>
                                                         <Eye className="w-4 h-4 mr-1" /> View

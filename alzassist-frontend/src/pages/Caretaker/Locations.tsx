@@ -30,8 +30,8 @@ const LocationsPage = () => {
     }, [patients, selectedPatient]);
 
     const center: [number, number] = patients.length > 0
-        ? [patients.reduce((sum, p) => sum + p.lat, 0) / patients.length,
-        patients.reduce((sum, p) => sum + p.lng, 0) / patients.length]
+        ? [patients.reduce((sum, p) => sum + (p.lat || 0), 0) / patients.length,
+        patients.reduce((sum, p) => sum + (p.lng || 0), 0) / patients.length]
         : [40.7128, -74.0060];
 
     return (
@@ -90,10 +90,10 @@ const LocationsPage = () => {
                                                     <span className={`w-3 h-3 rounded-full ${patient.status === 'Safe' ? 'bg-green-500' :
                                                         patient.status === 'Alert' ? 'bg-red-500' : 'bg-gray-500'
                                                         }`} />
-                                                    <span className={`text-xs flex items-center gap-1 ${patient.battery < 20 ? 'text-red-500' :
+                                                    <span className={`text-xs flex items-center gap-1 ${(patient.battery || 0) < 20 ? 'text-red-500' :
                                                         selectedPatient?.id === patient.id ? 'text-white/70' : 'text-muted-foreground'
                                                         }`}>
-                                                        <Battery className="w-3 h-3" /> {patient.battery > 0 ? `${patient.battery}%` : '--'}
+                                                        <Battery className="w-3 h-3" /> {(patient.battery || 0) > 0 ? `${patient.battery}%` : '--'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -113,7 +113,7 @@ const LocationsPage = () => {
                                         {patients.filter(p => p.lat && p.lng).map((patient) => (
                                             <Marker
                                                 key={patient.id}
-                                                position={[patient.lat, patient.lng]}
+                                                position={[patient.lat || 0, patient.lng || 0]}
                                                 eventHandlers={{
                                                     click: () => setSelectedPatient(patient)
                                                 }}
@@ -127,7 +127,7 @@ const LocationsPage = () => {
                                                             {patient.status}
                                                         </span>
                                                         <p className="text-sm mt-2">{patient.lastLocation}</p>
-                                                        <p className="text-sm">🔋 {patient.battery > 0 ? `${patient.battery}%` : 'N/A'}</p>
+                                                        <p className="text-sm">🔋 {(patient.battery || 0) > 0 ? `${patient.battery}%` : 'N/A'}</p>
                                                         <div className="flex gap-2 mt-2">
                                                             <Button size="sm" variant="outline" onClick={() => window.location.href = `tel:${patient.phone}`}>
                                                                 <Phone className="w-3 h-3 mr-1" /> Call
@@ -146,7 +146,7 @@ const LocationsPage = () => {
                                         {patients.filter(p => p.lat && p.lng).map((patient) => (
                                             <Circle
                                                 key={`circle-${patient.id}`}
-                                                center={[patient.lat, patient.lng]}
+                                                center={[patient.lat || 0, patient.lng || 0]}
                                                 radius={500}
                                                 pathOptions={{
                                                     color: patient.status === 'Safe' ? 'green' : 'red',
