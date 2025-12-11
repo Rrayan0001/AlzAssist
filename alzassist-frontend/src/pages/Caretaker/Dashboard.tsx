@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Users, AlertTriangle, Map, Activity, Plus, Eye, MapPin, Bell, Check, X, Trash2 } from 'lucide-react';
+import { Users, AlertTriangle, Map, Activity, Plus, Eye, MapPin, Bell, Check, Trash2 } from 'lucide-react';
 
 export interface Patient {
     id: string;
@@ -239,8 +239,8 @@ const CaretakerDashboard = () => {
                                                 <TableCell className="font-medium">{p.name}</TableCell>
                                                 <TableCell>
                                                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${p.status === 'Safe' ? 'bg-green-100 text-green-800' :
-                                                            p.status === 'Alert' ? 'bg-red-100 text-red-800' :
-                                                                'bg-gray-100 text-gray-800'
+                                                        p.status === 'Alert' ? 'bg-red-100 text-red-800' :
+                                                            'bg-gray-100 text-gray-800'
                                                         }`}>
                                                         {p.status}
                                                     </span>
