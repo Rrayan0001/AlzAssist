@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { ArrowLeft, Phone, Ambulance, ShieldAlert, PhoneCall, Plus, Trash2, Loader2, User } from 'lucide-react';
+import { ArrowLeft, Phone, ShieldAlert, PhoneCall, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api } from '@/lib/api';
 

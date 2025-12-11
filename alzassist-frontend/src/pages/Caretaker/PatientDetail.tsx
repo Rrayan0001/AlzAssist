@@ -48,7 +48,7 @@ const PatientDetail = () => {
     const [journals, setJournals] = useState<JournalEntry[]>([]);
     const [medications, setMedications] = useState<Medication[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
-    const [isLoadingData, setIsLoadingData] = useState(true);
+
 
     useEffect(() => {
         const found = patients.find((p) => p.id === id);
@@ -59,7 +59,6 @@ const PatientDetail = () => {
     useEffect(() => {
         const fetchPatientData = async () => {
             if (!id) return;
-            setIsLoadingData(true);
             try {
                 // Fetch Location
                 const locationRes = await api.get(`/api/patient/location/${id}`);
@@ -87,7 +86,6 @@ const PatientDetail = () => {
             } catch (error) {
                 console.error('Failed to fetch patient details:', error);
             }
-            setIsLoadingData(false);
         };
 
         if (id) {
