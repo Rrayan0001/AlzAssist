@@ -14,14 +14,7 @@ interface Task {
     completed: boolean;
 }
 
-const defaultTasks: Task[] = [
-    { id: '1', text: 'Brush teeth', completed: false },
-    { id: '2', text: 'Eat breakfast', completed: false },
-    { id: '3', text: 'Take morning medicine', completed: false },
-    { id: '4', text: 'Water the plants', completed: false },
-    { id: '5', text: 'Call daughter', completed: false },
-    { id: '6', text: 'Read a book', completed: false },
-];
+// No demo data - start empty
 
 const Tasks = () => {
     const { user } = useAuthStore();
@@ -37,8 +30,7 @@ const Tasks = () => {
             if (stored) {
                 setTasks(JSON.parse(stored));
             } else {
-                setTasks(defaultTasks);
-                localStorage.setItem(`tasks-${user?.id}`, JSON.stringify(defaultTasks));
+                setTasks([]);
             }
             setIsLoading(false);
         };

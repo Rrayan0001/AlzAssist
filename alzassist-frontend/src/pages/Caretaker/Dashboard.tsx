@@ -34,39 +34,12 @@ export interface Alert {
     resolved: boolean;
 }
 
-// Initial patients for demo
-const getInitialPatients = (linkedPatientEmail?: string): Patient[] => {
-    const defaultPatients: Patient[] = [
-        { id: '1', name: 'James Doe', email: 'james@example.com', age: 78, status: 'Safe', lastLocation: 'Home', battery: 85, lat: 40.7128, lng: -74.0060, phone: '+1555-0101', linkedAt: new Date().toISOString() },
-        { id: '2', name: 'Maria Garcia', email: 'maria@example.com', age: 82, status: 'Alert', lastLocation: 'Park (Geofence Exit)', battery: 40, lat: 40.7580, lng: -73.9855, phone: '+1555-0102', linkedAt: new Date().toISOString() },
-    ];
-
-    // If caretaker linked a patient at signup, add them first
-    if (linkedPatientEmail) {
-        const linkedPatient: Patient = {
-            id: 'linked-' + Date.now(),
-            name: linkedPatientEmail.split('@')[0].replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            email: linkedPatientEmail,
-            age: 75,
-            status: 'Safe',
-            lastLocation: 'Home',
-            battery: 100,
-            lat: 40.7489,
-            lng: -73.9680,
-            phone: 'Not set',
-            linkedAt: new Date().toISOString()
-        };
-        return [linkedPatient, ...defaultPatients];
-    }
-
-    return defaultPatients;
+// No demo data - start empty
+const getInitialPatients = (): Patient[] => {
+    return [];
 };
 
-const initialAlerts: Alert[] = [
-    { id: '1', patientId: '2', patientName: 'Maria Garcia', type: 'GEOFENCE_EXIT', message: 'Left the Safe Zone (Park)', time: new Date(Date.now() - 120000), resolved: false },
-    { id: '2', patientId: '2', patientName: 'Maria Garcia', type: 'LOW_BATTERY', message: 'Tracker battery is at 15%', time: new Date(Date.now() - 600000), resolved: false },
-    { id: '3', patientId: '1', patientName: 'James Doe', type: 'MISSED_MEDICATION', message: 'Missed afternoon medication', time: new Date(Date.now() - 3600000), resolved: true },
-];
+const initialAlerts: Alert[] = [];
 
 // Export for use in other pages
 export const usePatientsStore = () => {
@@ -76,8 +49,7 @@ export const usePatientsStore = () => {
     const [patients, setPatients] = useState<Patient[]>(() => {
         const stored = localStorage.getItem(storageKey);
         if (stored) return JSON.parse(stored);
-        // Initialize with linked patient from signup if exists
-        return getInitialPatients(user?.linkedPatientId);
+        return getInitialPatients();
     });
 
     const savePatients = (newPatients: Patient[]) => {

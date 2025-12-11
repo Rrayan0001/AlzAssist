@@ -18,11 +18,7 @@ interface Medicine {
     instructions: string;
 }
 
-const defaultMeds: Medicine[] = [
-    { id: '1', name: 'Donepezil', dosage: '10mg', time: '09:00', taken: false, instructions: 'Take with food' },
-    { id: '2', name: 'Memantine', dosage: '5mg', time: '14:00', taken: false, instructions: 'Take with water' },
-    { id: '3', name: 'Vitamin D', dosage: '1000 IU', time: '20:00', taken: false, instructions: 'Before bed' },
-];
+// No demo data - start empty
 
 const Medications = () => {
     const { user } = useAuthStore();
@@ -40,9 +36,7 @@ const Medications = () => {
             if (stored) {
                 setMeds(JSON.parse(stored));
             } else {
-                // Use defaults for new users
-                setMeds(defaultMeds);
-                localStorage.setItem(`medications-${user?.id}`, JSON.stringify(defaultMeds));
+                setMeds([]);
             }
             setIsLoading(false);
         };
