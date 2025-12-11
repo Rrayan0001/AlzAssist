@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/shared/Navbar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Loader2 } from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface Task {
     id: string;
@@ -13,17 +14,46 @@ interface Task {
     completed: boolean;
 }
 
-const Tasks = () => {
-    const [tasks, setTasks] = useState<Task[]>([
-        { id: '1', text: 'Brush teeth', completed: true },
-        { id: '2', text: 'Eat breakfast', completed: true },
-        { id: '3', text: 'Take morning medicine', completed: true },
-        { id: '4', text: 'Water the plants', completed: false },
-        { id: '5', text: 'Call daughter', completed: false },
-        { id: '6', text: 'Read a book', completed: false },
-    ]);
+const defaultTasks: Task[] = [
+    { id: '1', text: 'Brush teeth', completed: false },
+    { id: '2', text: 'Eat breakfast', completed: false },
+    { id: '3', text: 'Take morning medicine', completed: false },
+    { id: '4', text: 'Water the plants', completed: false },
+    { id: '5', text: 'Call daughter', completed: false },
+    { id: '6', text: 'Read a book', completed: false },
+];
 
+const Tasks = () => {
+    const { user } = useAuthStore();
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [newTask, setNewTask] = useState('');
+
+    // Load tasks
+    useEffect(() => {
+        const loadTasks = () => {
+            setIsLoading(true);
+            const stored = localStorage.getItem(`tasks-${user?.id}`);
+            if (stored) {
+                setTasks(JSON.parse(stored));
+            } else {
+                setTasks(defaultTasks);
+                localStorage.setItem(`tasks-${user?.id}`, JSON.stringify(defaultTasks));
+            }
+            setIsLoading(false);
+        };
+
+        if (user) {
+            loadTasks();
+        }
+    }, [user]);
+
+    // Save whenever tasks change
+    useEffect(() => {
+        if (user && tasks.length > 0) {
+            localStorage.setItem(`tasks-${user.id}`, JSON.stringify(tasks));
+        }
+    }, [tasks, user]);
 
     const toggleTask = (id: string) => {
         setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
@@ -41,7 +71,11 @@ const Tasks = () => {
     };
 
     const deleteTask = (id: string) => {
-        setTasks(tasks.filter(t => t.id !== id));
+        const updated = tasks.filter(t => t.id !== id);
+        setTasks(updated);
+        if (updated.length === 0) {
+            localStorage.removeItem(`tasks-${user?.id}`);
+        }
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -95,38 +129,45 @@ const Tasks = () => {
                     </CardContent>
                 </Card>
 
-                <div className="space-y-3">
-                    {tasks.map((task) => (
-                        <Card key={task.id} className={`transition-all group ${task.completed ? 'bg-sky-50 border-sky-200' : 'bg-card'}`}>
-                            <CardContent className="p-5 flex items-center gap-4">
-                                <Checkbox
-                                    id={task.id}
-                                    checked={task.completed}
-                                    onCheckedChange={() => toggleTask(task.id)}
-                                    className="w-7 h-7 border-2 border-sky-500 data-[state=checked]:bg-sky-600"
-                                />
-                                <label
-                                    htmlFor={task.id}
-                                    className={`text-xl font-medium cursor-pointer flex-1 ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}
-                                >
-                                    {task.text}
-                                </label>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                                    onClick={() => deleteTask(task.id)}
-                                >
-                                    <Trash2 className="w-5 h-5" />
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ))}
+                {isLoading ? (
+                    <div className="text-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                        <p className="text-muted-foreground mt-2">Loading tasks...</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {tasks.map((task) => (
+                            <Card key={task.id} className={`transition-all group ${task.completed ? 'bg-sky-50 border-sky-200' : 'bg-card'}`}>
+                                <CardContent className="p-5 flex items-center gap-4">
+                                    <Checkbox
+                                        id={task.id}
+                                        checked={task.completed}
+                                        onCheckedChange={() => toggleTask(task.id)}
+                                        className="w-7 h-7 border-2 border-sky-500 data-[state=checked]:bg-sky-600"
+                                    />
+                                    <label
+                                        htmlFor={task.id}
+                                        className={`text-xl font-medium cursor-pointer flex-1 ${task.completed ? 'line-through text-muted-foreground' : 'text-foreground'}`}
+                                    >
+                                        {task.text}
+                                    </label>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                                        onClick={() => deleteTask(task.id)}
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
 
-                    {tasks.length === 0 && (
-                        <p className="text-muted-foreground text-center py-8">No tasks yet. Add one above!</p>
-                    )}
-                </div>
+                        {tasks.length === 0 && (
+                            <p className="text-muted-foreground text-center py-8">No tasks yet. Add one above!</p>
+                        )}
+                    </div>
+                )}
             </main>
         </div>
     );

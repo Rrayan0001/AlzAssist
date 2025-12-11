@@ -5,23 +5,14 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-// Mock login helper
-const performLogin = async (email: string, role: string) => {
-    return new Promise<{ success: boolean; role: Role }>((resolve) => {
-        console.log(`Logging in ${email} as ${role}`);
-        setTimeout(() => resolve({ success: true, role: role as Role }), 1000);
-    });
-};
-
 const Login = () => {
     const navigate = useNavigate();
-    const login = useAuthStore((state) => state.login);
-    const [loading, setLoading] = useState(false);
+    const { login, isLoading, error, clearError } = useAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -29,22 +20,16 @@ const Login = () => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
+        clearError();
 
-        // Simulating API call
-        try {
-            await performLogin(email, selectedRole || 'PATIENT');
-            login(email, selectedRole);
+        const success = await login(email, password, selectedRole);
 
+        if (success) {
             if (selectedRole === 'PATIENT') {
                 navigate('/patient/dashboard');
             } else {
                 navigate('/caretaker/dashboard');
             }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -72,6 +57,12 @@ const Login = () => {
                             </p>
                         </TabsContent>
                     </Tabs>
+
+                    {error && (
+                        <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+                            {error}
+                        </div>
+                    )}
 
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div className="space-y-2">
@@ -114,8 +105,15 @@ const Login = () => {
                                 </button>
                             </div>
                         </div>
-                        <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={loading}>
-                            {loading ? 'Signing in...' : 'Sign In'}
+                        <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Signing in...
+                                </>
+                            ) : (
+                                'Sign In'
+                            )}
                         </Button>
                     </form>
                 </CardContent>
