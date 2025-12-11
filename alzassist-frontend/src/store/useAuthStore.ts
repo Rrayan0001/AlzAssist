@@ -143,29 +143,38 @@ export const useAuthStore = create<AuthState>()(
                         return false;
                     }
 
-                    // Create profile in the database via backend API
+                    // Create profile in the database
+                    // First check if profile already exists
+                    const { data: existingProfile } = await supabase
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', authData.user.id)
+                        .single();
 
-                    // Create profile
-                    const profileResult = await api.post('/auth/signup', {
-                        userId: authData.user.id,
-                        role,
-                        name
-                    });
+                    if (!existingProfile) {
+                        // Try to create profile via backend API
+                        const profileResult = await api.post('/auth/signup', {
+                            userId: authData.user.id,
+                            role,
+                            name
+                        });
 
-                    if (!profileResult.success) {
-                        // Try to create profile directly via Supabase
-                        const { error: insertError } = await supabase
-                            .from('profiles')
-                            .insert({
-                                id: authData.user.id,
-                                role,
-                                name
-                            });
+                        if (!profileResult.success) {
+                            // Try to create profile directly via Supabase
+                            const { error: insertError } = await supabase
+                                .from('profiles')
+                                .upsert({
+                                    id: authData.user.id,
+                                    role,
+                                    name
+                                }, { onConflict: 'id' });
 
-                        if (insertError) {
-                            console.error('Profile creation error:', insertError);
-                            set({ isLoading: false, error: 'Failed to create profile. Please try again.' });
-                            return false;
+                            if (insertError && insertError.code !== '23505') {
+                                // Ignore duplicate key error, fail on other errors
+                                console.error('Profile creation error:', insertError);
+                                set({ isLoading: false, error: 'Failed to create profile. Please try again.' });
+                                return false;
+                            }
                         }
                     }
 
