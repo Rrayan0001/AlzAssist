@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/shared/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Users, AlertTriangle, Map, Activity, Plus, Eye, MapPin, Bell, Check, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
+import { Users, AlertTriangle, Map, Activity, Eye, MapPin, Bell, Check, Trash2, Link2, Mail, UserPlus, CheckCircle2 } from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export interface Patient {
     id: string;
     name: string;
+    email: string;
     age: number;
     status: 'Safe' | 'Alert' | 'Offline';
     lastLocation: string;
@@ -19,6 +21,7 @@ export interface Patient {
     lat: number;
     lng: number;
     phone: string;
+    linkedAt: string;
 }
 
 export interface Alert {
@@ -31,12 +34,33 @@ export interface Alert {
     resolved: boolean;
 }
 
-// Shared state - in a real app this would be in a global store or API
-const initialPatients: Patient[] = [
-    { id: '1', name: 'James Doe', age: 78, status: 'Safe', lastLocation: 'Home', battery: 85, lat: 40.7128, lng: -74.0060, phone: '+1555-0101' },
-    { id: '2', name: 'Maria Garcia', age: 82, status: 'Alert', lastLocation: 'Park (Geofence Exit)', battery: 40, lat: 40.7580, lng: -73.9855, phone: '+1555-0102' },
-    { id: '3', name: 'Robert Smith', age: 75, status: 'Safe', lastLocation: 'Home', battery: 92, lat: 40.7489, lng: -73.9680, phone: '+1555-0103' },
-];
+// Initial patients for demo
+const getInitialPatients = (linkedPatientEmail?: string): Patient[] => {
+    const defaultPatients: Patient[] = [
+        { id: '1', name: 'James Doe', email: 'james@example.com', age: 78, status: 'Safe', lastLocation: 'Home', battery: 85, lat: 40.7128, lng: -74.0060, phone: '+1555-0101', linkedAt: new Date().toISOString() },
+        { id: '2', name: 'Maria Garcia', email: 'maria@example.com', age: 82, status: 'Alert', lastLocation: 'Park (Geofence Exit)', battery: 40, lat: 40.7580, lng: -73.9855, phone: '+1555-0102', linkedAt: new Date().toISOString() },
+    ];
+
+    // If caretaker linked a patient at signup, add them first
+    if (linkedPatientEmail) {
+        const linkedPatient: Patient = {
+            id: 'linked-' + Date.now(),
+            name: linkedPatientEmail.split('@')[0].replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            email: linkedPatientEmail,
+            age: 75,
+            status: 'Safe',
+            lastLocation: 'Home',
+            battery: 100,
+            lat: 40.7489,
+            lng: -73.9680,
+            phone: 'Not set',
+            linkedAt: new Date().toISOString()
+        };
+        return [linkedPatient, ...defaultPatients];
+    }
+
+    return defaultPatients;
+};
 
 const initialAlerts: Alert[] = [
     { id: '1', patientId: '2', patientName: 'Maria Garcia', type: 'GEOFENCE_EXIT', message: 'Left the Safe Zone (Park)', time: new Date(Date.now() - 120000), resolved: false },
@@ -46,13 +70,18 @@ const initialAlerts: Alert[] = [
 
 // Export for use in other pages
 export const usePatientsStore = () => {
+    const { user } = useAuthStore();
+    const storageKey = `caretaker-patients-${user?.id}`;
+
     const [patients, setPatients] = useState<Patient[]>(() => {
-        const stored = localStorage.getItem('caretaker-patients');
-        return stored ? JSON.parse(stored) : initialPatients;
+        const stored = localStorage.getItem(storageKey);
+        if (stored) return JSON.parse(stored);
+        // Initialize with linked patient from signup if exists
+        return getInitialPatients(user?.linkedPatientId);
     });
 
     const savePatients = (newPatients: Patient[]) => {
-        localStorage.setItem('caretaker-patients', JSON.stringify(newPatients));
+        localStorage.setItem(storageKey, JSON.stringify(newPatients));
         setPatients(newPatients);
     };
 
@@ -60,13 +89,16 @@ export const usePatientsStore = () => {
 };
 
 export const useAlertsStore = () => {
+    const { user } = useAuthStore();
+    const storageKey = `caretaker-alerts-${user?.id}`;
+
     const [alerts, setAlerts] = useState<Alert[]>(() => {
-        const stored = localStorage.getItem('caretaker-alerts');
+        const stored = localStorage.getItem(storageKey);
         return stored ? JSON.parse(stored) : initialAlerts;
     });
 
     const saveAlerts = (newAlerts: Alert[]) => {
-        localStorage.setItem('caretaker-alerts', JSON.stringify(newAlerts));
+        localStorage.setItem(storageKey, JSON.stringify(newAlerts));
         setAlerts(newAlerts);
     };
 
@@ -92,28 +124,57 @@ const CaretakerDashboard = () => {
     const { patients, setPatients } = usePatientsStore();
     const { alerts, setAlerts } = useAlertsStore();
 
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [newPatient, setNewPatient] = useState({ name: '', age: '', phone: '' });
+    const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+    const [linkEmail, setLinkEmail] = useState('');
+    const [linkSuccess, setLinkSuccess] = useState(false);
+    const [linkError, setLinkError] = useState('');
 
     const activeAlerts = alerts.filter(a => !a.resolved);
     const safePatients = patients.filter(p => p.status === 'Safe').length;
 
-    const handleAddPatient = () => {
-        if (!newPatient.name || !newPatient.age) return;
-        const patient: Patient = {
-            id: Date.now().toString(),
-            name: newPatient.name,
-            age: parseInt(newPatient.age),
+    // Reset link dialog state when closed
+    useEffect(() => {
+        if (!linkDialogOpen) {
+            setTimeout(() => {
+                setLinkEmail('');
+                setLinkSuccess(false);
+                setLinkError('');
+            }, 300);
+        }
+    }, [linkDialogOpen]);
+
+    const handleLinkPatient = () => {
+        setLinkError('');
+
+        // Validate email
+        if (!linkEmail.trim() || !linkEmail.includes('@')) {
+            setLinkError('Please enter a valid email address');
+            return;
+        }
+
+        // Check if already linked
+        if (patients.some(p => p.email.toLowerCase() === linkEmail.toLowerCase())) {
+            setLinkError('This patient is already linked to your account');
+            return;
+        }
+
+        // Create new patient from email (in real app, this would be an API call)
+        const newPatient: Patient = {
+            id: 'linked-' + Date.now(),
+            name: linkEmail.split('@')[0].replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            email: linkEmail.toLowerCase(),
+            age: 0, // Will be updated when patient completes profile
             status: 'Safe',
-            lastLocation: 'Home',
-            battery: 100,
+            lastLocation: 'Pending...',
+            battery: 0,
             lat: 40.7128 + (Math.random() - 0.5) * 0.1,
             lng: -74.0060 + (Math.random() - 0.5) * 0.1,
-            phone: newPatient.phone || 'N/A'
+            phone: 'Pending...',
+            linkedAt: new Date().toISOString()
         };
-        setPatients([...patients, patient]);
-        setNewPatient({ name: '', age: '', phone: '' });
-        setDialogOpen(false);
+
+        setPatients([...patients, newPatient]);
+        setLinkSuccess(true);
     };
 
     const handleResolveAlert = (alertId: string) => {
@@ -149,54 +210,88 @@ const CaretakerDashboard = () => {
             <main className="container mx-auto p-6">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-foreground">Caretaker Portal</h1>
-                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+
+                    {/* Link Patient Dialog */}
+                    <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button className="bg-primary hover:bg-primary/90">
-                                <Plus className="mr-2 w-4 h-4" /> Add Patient
+                            <Button className="bg-violet-600 hover:bg-violet-700">
+                                <Link2 className="mr-2 w-4 h-4" /> Link New Patient
                             </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="sm:max-w-md">
                             <DialogHeader>
-                                <DialogTitle>Add New Patient</DialogTitle>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <UserPlus className="w-5 h-5 text-violet-600" />
+                                    Link Patient Account
+                                </DialogTitle>
+                                <DialogDescription>
+                                    Enter the email address of the patient you want to monitor. They must have an AlzAssist patient account.
+                                </DialogDescription>
                             </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="name">Patient Name</Label>
-                                    <Input
-                                        id="name"
-                                        placeholder="Full name"
-                                        value={newPatient.name}
-                                        onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
-                                    />
+
+                            {linkSuccess ? (
+                                <div className="py-8 text-center">
+                                    <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                                    <h3 className="text-xl font-semibold text-foreground mb-2">Patient Linked!</h3>
+                                    <p className="text-muted-foreground mb-4">
+                                        You can now monitor <strong>{linkEmail}</strong>
+                                    </p>
+                                    <Button onClick={() => setLinkDialogOpen(false)} className="bg-violet-600 hover:bg-violet-700">
+                                        Done
+                                    </Button>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="age">Age</Label>
-                                    <Input
-                                        id="age"
-                                        type="number"
-                                        placeholder="e.g. 75"
-                                        value={newPatient.age}
-                                        onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="phone">Phone (Optional)</Label>
-                                    <Input
-                                        id="phone"
-                                        placeholder="+1 555-0100"
-                                        value={newPatient.phone}
-                                        onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button variant="outline">Cancel</Button>
-                                </DialogClose>
-                                <Button onClick={handleAddPatient} disabled={!newPatient.name || !newPatient.age}>
-                                    Add Patient
-                                </Button>
-                            </DialogFooter>
+                            ) : (
+                                <>
+                                    <div className="space-y-4 py-4">
+                                        <div className="p-4 bg-violet-50 rounded-lg border border-violet-200">
+                                            <div className="flex gap-3">
+                                                <Mail className="w-5 h-5 text-violet-600 mt-0.5" />
+                                                <div className="flex-1 space-y-2">
+                                                    <Label htmlFor="patient-email" className="text-violet-800 font-medium">
+                                                        Patient's Email Address
+                                                    </Label>
+                                                    <Input
+                                                        id="patient-email"
+                                                        type="email"
+                                                        placeholder="patient@example.com"
+                                                        value={linkEmail}
+                                                        onChange={(e) => {
+                                                            setLinkEmail(e.target.value);
+                                                            setLinkError('');
+                                                        }}
+                                                        className="bg-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {linkError && (
+                                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                                {linkError}
+                                            </div>
+                                        )}
+
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                            <p>ℹ️ The patient will appear in your dashboard once linked.</p>
+                                            <p>📍 You'll be able to track their location, medications, and activities.</p>
+                                        </div>
+                                    </div>
+
+                                    <DialogFooter className="gap-2">
+                                        <DialogClose asChild>
+                                            <Button variant="outline">Cancel</Button>
+                                        </DialogClose>
+                                        <Button
+                                            onClick={handleLinkPatient}
+                                            disabled={!linkEmail.trim()}
+                                            className="bg-violet-600 hover:bg-violet-700"
+                                        >
+                                            <Link2 className="w-4 h-4 mr-2" />
+                                            Link Patient
+                                        </Button>
+                                    </DialogFooter>
+                                </>
+                            )}
                         </DialogContent>
                     </Dialog>
                 </div>
@@ -212,7 +307,7 @@ const CaretakerDashboard = () => {
                     {/* Patient List */}
                     <Card className="lg:col-span-2">
                         <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle className="text-foreground">Patient Overview</CardTitle>
+                            <CardTitle className="text-foreground">Linked Patients</CardTitle>
                             <Link to="/caretaker/locations">
                                 <Button variant="outline" size="sm">
                                     <MapPin className="w-4 h-4 mr-2" /> View All Locations
@@ -221,7 +316,16 @@ const CaretakerDashboard = () => {
                         </CardHeader>
                         <CardContent>
                             {patients.length === 0 ? (
-                                <p className="text-muted-foreground text-center py-8">No patients yet. Add one to get started.</p>
+                                <div className="text-center py-12">
+                                    <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                                    <p className="text-muted-foreground mb-4">No patients linked yet.</p>
+                                    <Button
+                                        onClick={() => setLinkDialogOpen(true)}
+                                        className="bg-violet-600 hover:bg-violet-700"
+                                    >
+                                        <Link2 className="w-4 h-4 mr-2" /> Link Your First Patient
+                                    </Button>
+                                </div>
                             ) : (
                                 <Table>
                                     <TableHeader>
@@ -236,7 +340,12 @@ const CaretakerDashboard = () => {
                                     <TableBody>
                                         {patients.map((p) => (
                                             <TableRow key={p.id} className="group">
-                                                <TableCell className="font-medium">{p.name}</TableCell>
+                                                <TableCell>
+                                                    <div>
+                                                        <p className="font-medium">{p.name}</p>
+                                                        <p className="text-xs text-muted-foreground">{p.email}</p>
+                                                    </div>
+                                                </TableCell>
                                                 <TableCell>
                                                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${p.status === 'Safe' ? 'bg-green-100 text-green-800' :
                                                         p.status === 'Alert' ? 'bg-red-100 text-red-800' :
@@ -248,7 +357,7 @@ const CaretakerDashboard = () => {
                                                 <TableCell>{p.lastLocation}</TableCell>
                                                 <TableCell>
                                                     <span className={p.battery < 20 ? 'text-red-600 font-bold' : ''}>
-                                                        {p.battery}%
+                                                        {p.battery > 0 ? `${p.battery}%` : '--'}
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="text-right space-x-2">
