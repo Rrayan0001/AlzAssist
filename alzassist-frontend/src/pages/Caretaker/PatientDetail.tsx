@@ -3,12 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import Navbar from '@/components/shared/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, MapPin, Phone, Activity, Calendar, Pill, Battery, Clock } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Activity, Calendar, Pill, Battery, Clock, Mail } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import { usePatientsStore, type Patient } from './Dashboard';
 
 const DefaultIcon = L.icon({
     iconUrl: icon,
@@ -17,18 +18,6 @@ const DefaultIcon = L.icon({
     iconAnchor: [12, 41]
 });
 L.Marker.prototype.options.icon = DefaultIcon;
-
-interface Patient {
-    id: string;
-    name: string;
-    age: number;
-    status: 'Safe' | 'Alert' | 'Offline';
-    lastLocation: string;
-    battery: number;
-    lat: number;
-    lng: number;
-    phone: string;
-}
 
 interface JournalEntry {
     id: string;
@@ -46,9 +35,10 @@ interface Medication {
 
 const PatientDetail = () => {
     const { id } = useParams();
+    const { patients } = usePatientsStore();
     const [patient, setPatient] = useState<Patient | null>(null);
 
-    // Mock data for patient details
+    // Mock data for patient details - in real app would fetch from patient's data
     const journalEntries: JournalEntry[] = [
         { id: '1', date: new Date(Date.now() - 86400000), content: 'Had a wonderful day at the park.', mood: 'Happy' },
         { id: '2', date: new Date(Date.now() - 172800000), content: 'Felt a bit tired today.', mood: 'Neutral' },
@@ -68,13 +58,9 @@ const PatientDetail = () => {
     ];
 
     useEffect(() => {
-        const stored = localStorage.getItem('caretaker-patients');
-        if (stored) {
-            const patients = JSON.parse(stored);
-            const found = patients.find((p: Patient) => p.id === id);
-            setPatient(found || null);
-        }
-    }, [id]);
+        const found = patients.find((p) => p.id === id);
+        setPatient(found || null);
+    }, [id, patients]);
 
     if (!patient) {
         return (
@@ -90,7 +76,7 @@ const PatientDetail = () => {
         );
     }
 
-    const position: [number, number] = [patient.lat, patient.lng];
+    const position: [number, number] = [patient.lat || 40.7128, patient.lng || -74.0060];
 
     return (
         <div className="min-h-screen bg-background">
@@ -104,7 +90,12 @@ const PatientDetail = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-foreground">{patient.name}</h1>
-                        <p className="text-muted-foreground">Age: {patient.age} • Phone: {patient.phone}</p>
+                        <p className="text-muted-foreground flex items-center gap-2">
+                            <Mail className="w-4 h-4" /> {patient.email}
+                        </p>
+                        <p className="text-muted-foreground">
+                            Age: {patient.age > 0 ? patient.age : 'Not set'} • Phone: {patient.phone || 'Not set'}
+                        </p>
                     </div>
                     <div className="flex items-center gap-4">
                         <span className={`px-4 py-2 rounded-full text-sm font-semibold ${patient.status === 'Safe' ? 'bg-green-100 text-green-800' :
@@ -115,9 +106,9 @@ const PatientDetail = () => {
                         </span>
                         <div className={`flex items-center gap-1 ${patient.battery < 20 ? 'text-red-600' : 'text-muted-foreground'}`}>
                             <Battery className="w-5 h-5" />
-                            <span className="font-medium">{patient.battery}%</span>
+                            <span className="font-medium">{patient.battery > 0 ? `${patient.battery}%` : '--'}</span>
                         </div>
-                        <Button onClick={() => window.location.href = `tel:${patient.phone}`}>
+                        <Button onClick={() => window.location.href = `tel:${patient.phone}`} className="bg-violet-600 hover:bg-violet-700">
                             <Phone className="w-4 h-4 mr-2" /> Call
                         </Button>
                     </div>
@@ -128,24 +119,30 @@ const PatientDetail = () => {
                     <Card className="lg:row-span-2">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <MapPin className="text-primary" /> Current Location
+                                <MapPin className="text-violet-600" /> Current Location
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0 h-[400px]">
-                            <MapContainer center={position} zoom={14} scrollWheelZoom={true} className="h-full w-full rounded-b-lg">
-                                <TileLayer
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                />
-                                <Marker position={position}>
-                                    <Popup>
-                                        <strong>{patient.name}</strong><br />
-                                        {patient.lastLocation}
-                                    </Popup>
-                                </Marker>
-                                {/* Geofence circle */}
-                                <Circle center={position} radius={500} pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }} />
-                            </MapContainer>
+                            {patient.lat && patient.lng ? (
+                                <MapContainer center={position} zoom={14} scrollWheelZoom={true} className="h-full w-full rounded-b-lg">
+                                    <TileLayer
+                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                    />
+                                    <Marker position={position}>
+                                        <Popup>
+                                            <strong>{patient.name}</strong><br />
+                                            {patient.lastLocation}
+                                        </Popup>
+                                    </Marker>
+                                    {/* Geofence circle */}
+                                    <Circle center={position} radius={500} pathOptions={{ color: 'violet', fillColor: 'violet', fillOpacity: 0.1 }} />
+                                </MapContainer>
+                            ) : (
+                                <div className="h-full flex items-center justify-center bg-muted rounded-b-lg">
+                                    <p className="text-muted-foreground">Location pending...</p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -216,7 +213,7 @@ const PatientDetail = () => {
                                             <span className="text-sm text-muted-foreground">
                                                 {new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                             </span>
-                                            <span className={`text-xl ${entry.mood === 'Happy' ? '' : entry.mood === 'Sad' ? '' : ''}`}>
+                                            <span className="text-xl">
                                                 {entry.mood === 'Happy' ? '😊' : entry.mood === 'Sad' ? '😢' : '😐'}
                                             </span>
                                         </div>
