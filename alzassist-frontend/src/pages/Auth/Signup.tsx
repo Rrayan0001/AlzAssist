@@ -87,17 +87,11 @@ const Signup = () => {
             return;
         }
 
-        if (role === 'CARETAKER' && !formData.patientEmail.trim()) {
-            setValidationError('Please enter the patient email you want to monitor');
-            return;
-        }
-
         const success = await signup(
             formData.email,
             formData.password,
             formData.name,
-            role,
-            role === 'CARETAKER' ? formData.patientEmail : undefined
+            role
         );
 
         if (success) {

@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Send, Smile, Meh, Frown, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/useAuthStore';
 
 type Mood = 'Happy' | 'Neutral' | 'Sad';
@@ -18,10 +17,10 @@ interface Entry {
     mood: Mood;
 }
 
-const moodIcons = {
+const moodConfig = {
     Happy: { icon: Smile, color: 'text-green-500', bg: 'bg-green-100' },
-    Neutral: { icon: Meh, color: 'text-yellow-500', bg: 'bg-yellow-100' },
-    Sad: { icon: Frown, color: 'text-red-500', bg: 'bg-red-100' }
+    Neutral: { icon: Meh, color: 'text-amber-500', bg: 'bg-amber-100' },
+    Sad: { icon: Frown, color: 'text-blue-500', bg: 'bg-blue-100' }
 };
 
 const Journal = () => {
@@ -32,94 +31,46 @@ const Journal = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Load entries from backend or localStorage
+    // Load entries from localStorage
     useEffect(() => {
-        const loadEntries = async () => {
-            setIsLoading(true);
-            try {
-                if (user?.token && user.token !== 'mock-token') {
-                    const result = await api.get('/journals', user.token);
-                    if (result.success && result.data) {
-                        setEntries(result.data);
-                    }
-                } else {
-                    // Fallback to localStorage for demo
-                    const stored = localStorage.getItem(`journal-entries-${user?.id}`);
-                    if (stored) {
-                        setEntries(JSON.parse(stored));
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to load entries:', error);
-                // Fallback to localStorage
-                const stored = localStorage.getItem(`journal-entries-${user?.id}`);
-                if (stored) {
-                    setEntries(JSON.parse(stored));
-                }
-            }
-            setIsLoading(false);
-        };
-
-        if (user) {
-            loadEntries();
+        setIsLoading(true);
+        const stored = localStorage.getItem(`journal-entries-${user?.id}`);
+        if (stored) {
+            setEntries(JSON.parse(stored));
         }
+        setIsLoading(false);
     }, [user]);
 
-    // Save to localStorage whenever entries change (for demo purposes)
+    // Save to localStorage whenever entries change
     useEffect(() => {
         if (user && entries.length > 0) {
             localStorage.setItem(`journal-entries-${user.id}`, JSON.stringify(entries));
         }
     }, [entries, user]);
 
-    const handleSave = async () => {
+    const handleSave = () => {
         if (!newEntry.trim()) return;
         setIsSaving(true);
 
-        const newEntryData = {
+        const newEntryData: Entry = {
             id: Date.now().toString(),
             created_at: new Date().toISOString(),
             content: newEntry,
             mood: selectedMood
         };
 
-        try {
-            if (user?.token && user.token !== 'mock-token') {
-                const result = await api.post('/journals', {
-                    content: newEntry,
-                    mood: selectedMood
-                }, user.token);
-
-                if (result.success && result.data) {
-                    setEntries([result.data, ...entries]);
-                } else {
-                    // Fallback to local
-                    setEntries([newEntryData, ...entries]);
-                }
-            } else {
-                // Fallback to local storage only
-                setEntries([newEntryData, ...entries]);
-            }
-        } catch (error) {
-            console.error('Failed to save entry:', error);
-            // Fallback to local
-            setEntries([newEntryData, ...entries]);
-        }
-
+        setEntries([newEntryData, ...entries]);
         setNewEntry('');
         setSelectedMood('Neutral');
         setIsSaving(false);
     };
 
-    const handleDelete = async (id: string) => {
-        try {
-            if (user?.token && user.token !== 'mock-token') {
-                await api.delete(`/journals/${id}`, user.token);
-            }
-        } catch (error) {
-            console.error('Failed to delete entry:', error);
+    const handleDelete = (id: string) => {
+        const updated = entries.filter(e => e.id !== id);
+        setEntries(updated);
+        if (updated.length === 0) {
+            localStorage.removeItem(`journal-entries-${user?.id}`);
         }
-        setEntries(entries.filter(e => e.id !== id));
     };
 
     return (
@@ -130,50 +81,44 @@ const Journal = () => {
                     <ArrowLeft className="mr-2" /> Back to Dashboard
                 </Link>
 
-                <h1 className="text-3xl font-bold text-foreground mb-6">Daily Journal</h1>
-
-                <Card className="mb-8 border-t-4 border-t-amber-400 shadow-md">
+                <Card className="mb-6">
                     <CardHeader>
-                        <CardTitle className="text-foreground">How are you feeling today?</CardTitle>
+                        <CardTitle className="text-2xl">Daily Journal</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {/* Mood Selector */}
-                        <div className="flex gap-4 justify-center">
-                            {(Object.keys(moodIcons) as Mood[]).map((mood) => {
-                                const { icon: Icon, color, bg } = moodIcons[mood];
-                                return (
-                                    <button
-                                        key={mood}
-                                        onClick={() => setSelectedMood(mood)}
-                                        className={`p-4 rounded-full transition-all ${selectedMood === mood
-                                            ? `${bg} ring-4 ring-primary scale-110`
-                                            : 'bg-muted hover:bg-muted/80'
-                                            }`}
-                                    >
-                                        <Icon className={`w-8 h-8 ${color}`} />
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <p className="text-center text-muted-foreground">Selected: <strong>{selectedMood}</strong></p>
-
                         <Textarea
-                            placeholder="Write your thoughts here..."
-                            className="min-h-[150px] text-lg p-4 bg-card"
+                            placeholder="How are you feeling today? Write about your day..."
                             value={newEntry}
                             onChange={(e) => setNewEntry(e.target.value)}
+                            className="min-h-[120px] resize-none"
                         />
-                        <div className="flex justify-end">
-                            <Button
-                                size="lg"
-                                className="bg-amber-500 hover:bg-amber-600"
-                                onClick={handleSave}
-                                disabled={!newEntry.trim() || isSaving}
-                            >
+
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground">How do you feel?</span>
+                                {(['Happy', 'Neutral', 'Sad'] as Mood[]).map((mood) => {
+                                    const config = moodConfig[mood];
+                                    const Icon = config.icon;
+                                    return (
+                                        <button
+                                            key={mood}
+                                            onClick={() => setSelectedMood(mood)}
+                                            className={`p-2 rounded-full transition-all ${selectedMood === mood
+                                                    ? `${config.bg} ${config.color}`
+                                                    : 'hover:bg-muted text-muted-foreground'
+                                                }`}
+                                        >
+                                            <Icon className="w-6 h-6" />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <Button onClick={handleSave} disabled={isSaving || !newEntry.trim()}>
                                 {isSaving ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 ) : (
-                                    <Send className="mr-2 h-4 w-4" />
+                                    <Send className="w-4 h-4 mr-2" />
                                 )}
                                 Save Entry
                             </Button>
@@ -181,46 +126,51 @@ const Journal = () => {
                     </CardContent>
                 </Card>
 
-                <div className="space-y-4">
-                    <h2 className="text-xl font-semibold text-foreground">Past Entries</h2>
-                    {isLoading ? (
-                        <div className="text-center py-8">
-                            <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-                            <p className="text-muted-foreground mt-2">Loading entries...</p>
-                        </div>
-                    ) : entries.length === 0 ? (
-                        <p className="text-muted-foreground text-center py-8">No entries yet. Start writing!</p>
-                    ) : (
-                        entries.map((entry) => {
-                            const moodKey = (entry.mood as Mood) || 'Neutral';
-                            const { icon: MoodIcon, color, bg } = moodIcons[moodKey];
+                <h2 className="text-xl font-semibold mb-4">Past Entries</h2>
+
+                {isLoading ? (
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                ) : entries.length === 0 ? (
+                    <Card>
+                        <CardContent className="py-8 text-center text-muted-foreground">
+                            No journal entries yet. Start writing above!
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <div className="space-y-4">
+                        {entries.map((entry) => {
+                            const config = moodConfig[entry.mood];
+                            const Icon = config.icon;
                             return (
-                                <Card key={entry.id} className="bg-card group relative">
-                                    <CardContent className="p-6">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="text-sm font-medium text-primary">
-                                                {format(new Date(entry.created_at), 'MMMM do, yyyy • h:mm a')}
-                                            </span>
-                                            <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full ${bg} ${color}`}>
-                                                <MoodIcon className="w-4 h-4" />
-                                                {entry.mood}
-                                            </span>
+                                <Card key={entry.id}>
+                                    <CardContent className="py-4">
+                                        <div className="flex items-start justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`p-1 rounded-full ${config.bg}`}>
+                                                    <Icon className={`w-4 h-4 ${config.color}`} />
+                                                </span>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {format(new Date(entry.created_at), 'PPP p')}
+                                                </span>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleDelete(entry.id)}
+                                                className="text-destructive hover:text-destructive"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
                                         </div>
-                                        <p className="text-foreground text-lg">{entry.content}</p>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                                            onClick={() => handleDelete(entry.id)}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                        <p className="text-foreground whitespace-pre-wrap">{entry.content}</p>
                                     </CardContent>
                                 </Card>
                             );
-                        })
-                    )}
-                </div>
+                        })}
+                    </div>
+                )}
             </main>
         </div>
     );
