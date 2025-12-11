@@ -2,7 +2,10 @@
 // In development, the backend runs on localhost:3000
 // In production, replace with your Render backend URL
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Dynamically determine API URL based on current hostname
+// This allows the app to work on localhost and LAN IPs (e.g. 192.168.x.x)
+const hostname = window.location.hostname;
+export const API_BASE_URL = import.meta.env.VITE_API_URL || `http://${hostname}:3000`;
 
 export const api = {
     get: async (endpoint: string, token?: string) => {
